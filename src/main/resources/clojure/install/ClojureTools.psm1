@@ -24,6 +24,11 @@ function Invoke-Clojure {
   $Version = '${project.version}'
   $ToolsCp = "$InstallDir\clojure-tools-$Version.jar"
 
+  # Set up the jvm options to pass to Java coming from the env.
+  $CljJvmOpts = $env:CLJ_JVM_OPTS
+  $JavaToolOptionsEnv = $env:JAVA_TOOL_OPTIONS
+  $JavaToolOptions = if ($JavaToolOptionsEnv) {$JavaToolOptionsEnv+" "+$CljJvmOpts} else {$CljJvmOpts}
+
   # Extract opts
   $PrintClassPath = $FALSE
   $Describe = $FALSE
@@ -312,6 +317,9 @@ config_dir   = $ConfigDir
 config_paths = $ConfigPaths
 cache_dir    = $CacheDir
 cp_file      = $CpFile
+
+CLJ_JVM_OPTS = $Env:CLJ_JVM_OPTS
+JAVA_TOOL_OPTIONS = $Env:JAVA_TOOL_OPTIONS
 "@
   }
 
@@ -385,7 +393,13 @@ cp_file      = $CpFile
     if ($Verbose) {
       Write-Host "Refreshing classpath"
     }
-    & $JavaCmd -classpath $ToolsCp clojure.main -m clojure.tools.deps.alpha.script.make-classpath2 --config-user $ConfigUser --config-project $ConfigProject --basis-file $BasisFile --libs-file $LibsFile --cp-file $CpFile --jvm-file $JvmFile --main-file $MainFile --manifest-file $ManifestFile @ToolsArgs
+    try
+    {
+      $Env:JAVA_TOOL_OPTIONS = $JavaToolOptions;
+      & $JavaCmd -classpath $ToolsCp clojure.main -m clojure.tools.deps.alpha.script.make-classpath2 --config-user $ConfigUser --config-project $ConfigProject --basis-file $BasisFile --libs-file $LibsFile --cp-file $CpFile --jvm-file $JvmFile --main-file $MainFile --manifest-file $ManifestFile @ToolsArgs
+    } finally {
+      $Env:JAVA_TOOL_OPTIONS = $JavaToolOptionsEnv
+    }
     if ($LastExitCode -ne 0) {
       return
     }
@@ -402,7 +416,13 @@ cp_file      = $CpFile
   if ($Prep) {
     # Already done
   } elseif ($Pom) {
-    & $JavaCmd -classpath $ToolsCp clojure.main -m clojure.tools.deps.alpha.script.generate-manifest2 --config-user $ConfigUser --config-project $ConfigProject --gen=pom @ToolsArgs
+    try
+    {
+      $Env:JAVA_TOOL_OPTIONS = $JavaToolOptions;
+      & $JavaCmd -classpath $ToolsCp clojure.main -m clojure.tools.deps.alpha.script.generate-manifest2 --config-user $ConfigUser --config-project $ConfigProject --gen=pom @ToolsArgs
+    } finally {
+      $Env:JAVA_TOOL_OPTIONS = $JavaToolOptionsEnv
+    }
   } elseif ($PrintClassPath) {
     Write-Output $CP
   } elseif ($Describe) {
@@ -431,7 +451,13 @@ cp_file      = $CpFile
     }
 
     if (($Mode -eq 'exec') -or ($Mode -eq 'tool')) {
-      & $JavaCmd @JvmCacheOpts @JvmOpts "-Dclojure.basis=$BasisFile" -classpath "$CP;$InstallDir/exec.jar" clojure.main -m clojure.run.exec @ClojureArgs
+      try
+      {
+        $Env:JAVA_TOOL_OPTIONS = $JavaToolOptions;
+        & $JavaCmd @JvmCacheOpts  @JvmOpts "-Dclojure.basis=$BasisFile" -classpath "$CP;$InstallDir/exec.jar" clojure.main -m clojure.run.exec @ClojureArgs
+      } finally {
+        $Env:JAVA_TOOL_OPTIONS = $JavaToolOptionsEnv
+      }
     } else {
       if (Test-Path $MainFile) {
         # TODO this seems dangerous
@@ -440,7 +466,13 @@ cp_file      = $CpFile
       if ($ClojureArgs.Count -gt 0 -and $Mode -eq 'repl') {
         Write-Warning "WARNING: Implicit use of clojure.main with options is deprecated, use -M"
       }
-      & $JavaCmd @JvmCacheOpts @JvmOpts "-Dclojure.basis=$BasisFile" -classpath $CP clojure.main @MainCacheOpts @ClojureArgs
+      try
+      {
+        $Env:JAVA_TOOL_OPTIONS = $JavaToolOptions;
+        & $JavaCmd @JvmCacheOpts @JvmOpts "-Dclojure.basis=$BasisFile" -classpath $CP clojure.main @MainCacheOpts @ClojureArgs
+      } finally {
+        $Env:JAVA_TOOL_OPTIONS = $JavaToolOptionsEnv
+      }
     }
   }
 }
